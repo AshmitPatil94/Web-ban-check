@@ -4,4 +4,4 @@ colorama
 urllib3
 gunicorn
 PySocks
-minecraft
+git+https://github.com/ammaraskar/pyCraft.git
