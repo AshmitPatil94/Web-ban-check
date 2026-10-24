@@ -13,6 +13,7 @@
     --text: #f4f0ff;  
     --muted: #9290a6;  
     --green: #4ade80;  
+    --red: #f87171;
 }  
   
 * { box-sizing: border-box; }  
@@ -30,7 +31,7 @@ body {
   
 .container {  
     width: 100%;  
-    max-width: 720px;  
+    max-width: 760px;  
     margin: auto;  
     animation: appear .7s ease both;  
 }  
@@ -63,7 +64,6 @@ header {
     display: block;
 }
 
-  
 h1 { font-size: 25px; margin: 0; letter-spacing: -.7px; }  
 .subtitle { color: var(--muted); font-size: 13px; margin-top: 5px; }  
   
@@ -271,6 +271,13 @@ button:disabled { opacity: .45; cursor: not-allowed; }
     gap: 12px;  
     margin-top: 20px;  
 }  
+
+.stats-4 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-top: 15px;
+}
   
 .stat {  
     padding: 16px;  
@@ -280,7 +287,9 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 }  
   
 .stat-name { color: var(--muted); font-size: 12px; }  
-.stat-value { font-size: 22px; font-weight: 800; margin-top: 8px; }  
+.stat-value { font-size: 20px; font-weight: 800; margin-top: 6px; }  
+.stat-value.green { color: var(--green); }
+.stat-value.red { color: var(--red); }
   
 footer {  
     text-align: center;  
@@ -321,7 +330,6 @@ footer {
                 <input type="file" name="file" id="fileInput" required>  
             </div>  
 
-            <!-- Webhook Integration Option -->
             <div class="webhook-section">
                 <label>
                     <input type="checkbox" id="enableWebhook" name="enable_webhook" onclick="toggleWebhookInput()">
@@ -372,6 +380,31 @@ footer {
         </div>  
     </section>  
 
+    <!-- LIVE SERVER & GAMEMODE STATS SECTION -->
+    <section class="card" id="serverStatsCard">
+        <h2 class="card-title">🍩 DonutSMP & 🛡️ Hypixel Breakdown</h2>
+        <p class="description">Live breakdown of accounts checked in the latest job.</p>
+
+        <div class="stats-4">
+            <div class="stat">
+                <div class="stat-name">MC Java Owned</div>
+                <div class="stat-value green" id="mcOwnedCount">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-name">Donut Unbanned</div>
+                <div class="stat-value green" id="donutUnbannedCount">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-name">Donut Banned</div>
+                <div class="stat-value red" id="donutBannedCount">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-name">Hypixel Scraped</div>
+                <div class="stat-value" id="hypixelScrapedCount">0</div>
+            </div>
+        </div>
+    </section>
+
     <footer>Demon Dashboard · Experimental mode</footer>
 </div>  
 
@@ -401,6 +434,10 @@ const progress = document.getElementById("progress");
 const message = document.getElementById("message");  
 const lineCount = document.getElementById("lineCount");  
 const percent = document.getElementById("percent");  
+const mcOwnedCount = document.getElementById("mcOwnedCount");
+const donutUnbannedCount = document.getElementById("donutUnbannedCount");
+const donutBannedCount = document.getElementById("donutBannedCount");
+const hypixelScrapedCount = document.getElementById("hypixelScrapedCount");
   
 let jobId = null;  
 let busy = false;  
@@ -484,6 +521,13 @@ startBtn.addEventListener("click", async () => {
             if (status.status === "Completed") {  
                 setStatus("Completed", 100, status.message);  
                 lineCount.textContent = status.line_count ?? "—";  
+
+                if (status.stats_summary) {
+                    mcOwnedCount.textContent = status.stats_summary.mc_owned ?? 0;
+                    donutUnbannedCount.textContent = status.stats_summary.donut_unbanned ?? 0;
+                    donutBannedCount.textContent = status.stats_summary.donut_banned ?? 0;
+                    hypixelScrapedCount.textContent = status.stats_summary.mc_owned ?? 0;
+                }
 
                 if (status.download_url) {  
                     message.innerHTML += `<br><br><a href="${status.download_url}" class="primary" style="display:inline-block; padding:10px 16px; text-decoration:none; border-radius:8px; background:#4ade80; color:#000; font-weight:bold;">📥 Download results.txt</a>`;  
