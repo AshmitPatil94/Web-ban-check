@@ -21,8 +21,7 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 jobs = {}
 jobs_lock = threading.Lock()
 
-def send_hit_notification(email, password, account_type="Minecraft Java", capes="None", hypixel_level="N/A", hypixel_rank="N/A", donut_status="Unbanned", donut_reason="None", donut_time="None", donut_money="N/A", donut_playtime="N/A", user_webhook_url=None):
-    # IST Timezone (UTC +5:30) correction for accurate local time
+def send_hit_notification(email, password, account_type="Minecraft Java", capes="None", hypixel_level="N/A", hypixel_rank="N/A", donut_status="Unbanned", donut_reason="None", user_webhook_url=None):
     ist_offset = timezone(timedelta(hours=5, minutes=30))
     current_time = datetime.now(ist_offset).strftime('%Y-%m-%d %H:%M:%S')
 
@@ -70,7 +69,11 @@ def process_text_file(job_id, input_file, user_webhook=None):
         job_results_dir.mkdir(parents=True, exist_ok=True)
         output_file = job_results_dir / "results.txt"
 
-        validator.run(str(input_file), str(output_file), user_webhook=user_webhook)
+        # Pass callback lambda to validator
+        def hit_cb(**kwargs):
+            send_hit_notification(**kwargs, user_webhook_url=user_webhook)
+
+        validator.run(str(input_file), str(output_file), hit_callback=hit_cb)
 
         hits_count = 0
         hits_file = job_results_dir / "Hits.txt"
@@ -153,4 +156,3 @@ def download_result(folder, filename):
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=7860, debug=True)
-    
