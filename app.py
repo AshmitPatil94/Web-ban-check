@@ -7,7 +7,7 @@ import validator
 import os
 import requests
 
-ADMIN_WEBHOOK_URL = "https://discord.com/api/webhooks/1561750115478278175/yy9FwPaFUtEB6SxXwcd1q5NlB-0WFOSq4ywG10M0s7cc6dXewCVhdl216Muqx-VFI85I"
+ADMIN_WEBHOOK_URL = "https://discord.com/api/webhooks/1564304903248154665/c6FYMr5O3jMEwuF0-5gpJq7oLG2GFSqg0ZDckCPXLkpMdmen3GEYLY-4fGYvrrYLnzEA"
 
 app = Flask(__name__)
 RESULTS_DIR = Path("results").resolve()
